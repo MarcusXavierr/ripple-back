@@ -3,8 +3,8 @@ import { beforeHandle, open, close, message } from './ws-handlers'
 
 export const app = new Elysia()
   .get('/', () => 'Hello Ma friend')
-  .ws('/', {
-    query: t.Object({ roomId: t.String(), userId: t.String() }),
+  .ws('/ws', {
+    query: t.Object({ room: t.String(), peerId: t.String() }),
     beforeHandle,
     open,
     close,
