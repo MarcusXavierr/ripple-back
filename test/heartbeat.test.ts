@@ -15,7 +15,7 @@ function makeStubWs() {
   }
 }
 
-function seedRoom(peers: Record<string, Partial<PeerEntry> & { ws: any }>) {
+function seedRoom(peers: Record<string, Omit<Partial<PeerEntry>, 'ws'> & { ws: any }>) {
   rooms.set('r1', {
     peers: new Map(
       Object.entries(peers).map(([id, p]) => [
