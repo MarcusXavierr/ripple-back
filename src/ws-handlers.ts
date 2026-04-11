@@ -1,7 +1,8 @@
 import type { ElysiaWS } from 'elysia/ws'
-import { getRoom, addUser, removeUser } from './rooms'
+import { findOrCreateRoom, rooms, type PeerEntry } from './rooms'
+import { CLOSE_CODES, type Role } from './types'
 
-type Query = { roomId: string; userId: string }
+type Query = { room: string; peerId: string }
 export type Ws = ElysiaWS<{ query: Query }>
 
 interface BeforeHandleContext {
@@ -9,44 +10,77 @@ interface BeforeHandleContext {
 }
 
 export function beforeHandle({ query }: BeforeHandleContext): Response | undefined {
-  const { roomId, userId } = query
-  const ids = getRoom(roomId)
-  if (ids.length >= 2) {
-    console.log(`room is full: ${ids.length}`)
-    return new Response('Room is full', { status: 403 })
+  const { room, peerId } = query ?? ({} as Query)
+  if (!room || !peerId) {
+    return new Response('Missing room or peerId', { status: 400 })
   }
-
-  for (const id of ids) {
-    if (id === userId) {
-      console.log(`The user id ${userId} was already taken for this room`)
-      return new Response('The user id was already taken for this room')
-    }
-  }
-
-  addUser(roomId, userId)
 }
 
 export function open(ws: Ws): void {
-  const { roomId, userId } = ws.data.query
-  const room = getRoom(roomId)
+  const { room: roomId, peerId } = ws.data.query
+  const room = findOrCreateRoom(roomId)
 
-  if (room[0] === userId) {
-    ws.send(JSON.stringify({ order: 1, type: 'onopen' }))
-  } else if (room[1] === userId) {
-    ws.send(JSON.stringify({ order: 2, type: 'onopen' }))
+  // reconnection path lands in Task 5 — for now, same peerId reconnect is not handled.
+  // If an entry already exists, Task 5 will extend this function.
+  const existing = room.peers.get(peerId)
+  if (existing) {
+    // temporary: treat as if room-full to keep tests deterministic until Task 5.
+    // (Task 5 will replace this entire branch with the reconnection logic.)
+    ws.close(CLOSE_CODES.ROOM_FULL)
+    return
   }
 
+  if (room.peers.size >= 2) {
+    ws.close(CLOSE_CODES.ROOM_FULL)
+    return
+  }
+
+  const role: Role = room.caller === null ? 'caller' : 'callee'
+  if (role === 'caller') room.caller = peerId
+
+  const entry: PeerEntry = {
+    ws,
+    role,
+    disconnectedAt: null,
+    waitingPong: false,
+  }
+  room.peers.set(peerId, entry)
+
   ws.subscribe(roomId)
+  ws.send(JSON.stringify({ type: 'onopen', role, reconnect: false }))
   ws.publish(roomId, JSON.stringify({ type: 'enter' }))
 }
 
 export function close(ws: Ws): void {
-  const { roomId, userId } = ws.data.query
-  ws.publish(roomId, JSON.stringify({ type: 'onclose', message: 'o outro otario saiu' }))
+  const { room: roomId, peerId } = ws.data.query
+  const room = rooms.get(roomId)
+  if (!room) return
+  const entry = room.peers.get(peerId)
+  if (!entry) return
+
+  entry.ws = null
+  entry.disconnectedAt = Date.now()
+
+  ws.publish(roomId, JSON.stringify({ type: 'onclose', message: 'peer disconnected' }))
   ws.unsubscribe(roomId)
-  removeUser(roomId, userId)
 }
 
-export function message(ws: Ws, msg: string | Buffer): void {
-  ws.publish(ws.data.query.roomId, msg)
+export function message(ws: Ws, raw: string | Buffer): void {
+  const { room: roomId, peerId } = ws.data.query
+
+  // Parse just enough to detect pong. Everything else is relayed verbatim.
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw)
+      if (parsed && parsed.type === 'pong') {
+        const entry = rooms.get(roomId)?.peers.get(peerId)
+        if (entry) entry.waitingPong = false
+        return
+      }
+    } catch {
+      // fall through to relay
+    }
+  }
+
+  ws.publish(roomId, raw)
 }
