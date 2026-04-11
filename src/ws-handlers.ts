@@ -20,13 +20,18 @@ export function open(ws: Ws): void {
   const { room: roomId, peerId } = ws.data.query
   const room = findOrCreateRoom(roomId)
 
-  // reconnection path lands in Task 5 — for now, same peerId reconnect is not handled.
-  // If an entry already exists, Task 5 will extend this function.
   const existing = room.peers.get(peerId)
   if (existing) {
-    // temporary: treat as if room-full to keep tests deterministic until Task 5.
-    // (Task 5 will replace this entire branch with the reconnection logic.)
-    ws.close(CLOSE_CODES.ROOM_FULL)
+    // RECONNECTION: boot the old ws (if any), swap in the new one, preserve role.
+    if (existing.ws && existing.ws !== ws) {
+      try { existing.ws.close(1000) } catch { /* already closed */ }
+    }
+    existing.ws = ws
+    existing.disconnectedAt = null
+    existing.waitingPong = false
+    ws.subscribe(roomId)
+    ws.send(JSON.stringify({ type: 'onopen', role: existing.role, reconnect: true }))
+    ws.publish(roomId, JSON.stringify({ type: 'peer-reconnected' }))
     return
   }
 
