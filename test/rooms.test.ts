@@ -1,34 +1,28 @@
 import { describe, expect, it, beforeEach } from 'bun:test'
-import { rooms, getRoom, addUser, removeUser } from '../src/rooms'
+import { rooms, createRoom, findOrCreateRoom } from '../src/rooms'
 
-describe('rooms', () => {
+describe('rooms module', () => {
   beforeEach(() => rooms.clear())
 
-  it('getRoom returns empty array for unknown room', () => {
-    expect(getRoom('r1')).toEqual([])
+  it('createRoom initializes an empty room', () => {
+    const room = createRoom('r1')
+    expect(room.peers.size).toBe(0)
+    expect(room.caller).toBeNull()
+    expect(typeof room.createdAt).toBe('number')
+    expect(room.createdAt).toBeGreaterThan(0)
+    expect(rooms.get('r1')).toBe(room)
   })
 
-  it('addUser adds a user to the room', () => {
-    addUser('r1', 'alice')
-    expect(getRoom('r1')).toEqual(['alice'])
+  it('findOrCreateRoom returns existing room if present', () => {
+    const first = findOrCreateRoom('r1')
+    const second = findOrCreateRoom('r1')
+    expect(second).toBe(first)
   })
 
-  it('addUser can add a second user', () => {
-    addUser('r1', 'alice')
-    addUser('r1', 'bob')
-    expect(getRoom('r1')).toEqual(['alice', 'bob'])
-  })
-
-  it('removeUser removes a user from the room', () => {
-    addUser('r1', 'alice')
-    addUser('r1', 'bob')
-    removeUser('r1', 'alice')
-    expect(getRoom('r1')).toEqual(['bob'])
-  })
-
-  it('removeUser on unknown user leaves the room unchanged', () => {
-    addUser('r1', 'alice')
-    removeUser('r1', 'ghost')
-    expect(getRoom('r1')).toEqual(['alice'])
+  it('findOrCreateRoom creates a new room if absent', () => {
+    expect(rooms.has('r1')).toBe(false)
+    const room = findOrCreateRoom('r1')
+    expect(rooms.has('r1')).toBe(true)
+    expect(room.peers.size).toBe(0)
   })
 })
