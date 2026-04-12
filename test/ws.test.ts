@@ -198,4 +198,32 @@ describe('message — relay and pong', () => {
     message(ws, 'not json at all')
     expect(ws._publishes).toContainEqual(['r1', 'not json at all'])
   })
+
+  // Elysia pre-parses valid JSON strings into objects before calling the message handler.
+  // These tests cover the actual runtime path — the string path above is a fallback.
+
+  it('pong as pre-parsed object clears waitingPong (Elysia real path)', () => {
+    const ws = makeMockWs('r1', 'alice')
+    open(ws)
+    const entry = rooms.get('r1')!.peers.get('alice')!
+    entry.waitingPong = true
+    message(ws, { type: 'pong' } as any)
+    expect(entry.waitingPong).toBe(false)
+  })
+
+  it('pong as pre-parsed object does NOT publish to room (Elysia real path)', () => {
+    const ws = makeMockWs('r1', 'alice')
+    open(ws)
+    const before = ws._publishes.length
+    message(ws, { type: 'pong' } as any)
+    expect(ws._publishes.length).toBe(before)
+  })
+
+  it('non-pong pre-parsed object is relayed to the room', () => {
+    const ws = makeMockWs('r1', 'alice')
+    open(ws)
+    const payload = { type: 'offer', offer: { sdp: 'v=0', type: 'offer' } }
+    message(ws, payload as any)
+    expect(ws._publishes).toContainEqual(['r1', payload])
+  })
 })
