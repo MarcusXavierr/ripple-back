@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach } from 'bun:test'
 import { rooms } from '../src/rooms'
 import { gcSweep } from '../src/gc'
 import type { PeerEntry } from '../src/rooms'
+import { logger } from '../src/logger'
 
 const HOUR_MS = 60 * 60 * 1000
 const IDLE_MS = HOUR_MS
@@ -17,6 +18,7 @@ function seed(id: string, peers: Record<string, Partial<PeerEntry>>) {
           role: p.role ?? 'caller',
           disconnectedAt: p.disconnectedAt ?? null,
           waitingPong: p.waitingPong ?? false,
+          log: logger.child({ room: id, peerId: pid }),
         } as PeerEntry,
       ]),
     ),

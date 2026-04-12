@@ -1,11 +1,14 @@
 import type { ElysiaWS } from 'elysia/ws'
 import type { Role } from './types'
+import type { Logger } from './logger'
+import { logger } from './logger'
 
 export type PeerEntry = {
   ws: ElysiaWS | null
   role: Role
   disconnectedAt: number | null
   waitingPong: boolean
+  log: Logger
 }
 
 export type Room = {
@@ -23,6 +26,7 @@ export function createRoom(id: string): Room {
     createdAt: Date.now(),
   }
   rooms.set(id, room)
+  logger.debug({ room: id }, 'room created')
   return room
 }
 

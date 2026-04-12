@@ -8,11 +8,17 @@ export function heartbeatTick(): void {
     for (const entry of room.peers.values()) {
       if (entry.ws === null) continue
       if (entry.waitingPong) {
-        try { entry.ws.close(CLOSE_CODES.PING_TIMEOUT) } catch { /* ignore */ }
+        entry.log.warn('ping timeout — no pong received within interval, closing connection')
+        try { entry.ws.close(CLOSE_CODES.PING_TIMEOUT) } catch (err) {
+          entry.log.warn({ err }, 'failed to close timed-out peer')
+        }
         continue
       }
       entry.waitingPong = true
-      try { entry.ws.send(JSON.stringify({ type: 'ping' })) } catch { /* ignore */ }
+      entry.log.debug('ping sent, waitingPong set to true')
+      try { entry.ws.send(JSON.stringify({ type: 'ping' })) } catch (err) {
+        entry.log.warn({ err }, 'failed to send ping')
+      }
     }
   }
 }

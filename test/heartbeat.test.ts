@@ -3,6 +3,7 @@ import { rooms } from '../src/rooms'
 import { heartbeatTick } from '../src/heartbeat'
 import { CLOSE_CODES } from '../src/types'
 import type { PeerEntry } from '../src/rooms'
+import { logger } from '../src/logger'
 
 function makeStubWs() {
   const _sends: string[] = []
@@ -25,6 +26,7 @@ function seedRoom(peers: Record<string, Omit<Partial<PeerEntry>, 'ws'> & { ws: a
           role: p.role ?? 'caller',
           disconnectedAt: p.disconnectedAt ?? null,
           waitingPong: p.waitingPong ?? false,
+          log: logger.child({ room: 'r1', peerId: id }),
         } as PeerEntry,
       ]),
     ),
