@@ -6,6 +6,8 @@ import { logger } from './logger'
 type Query = { room: string; peerId: string }
 export type Ws = ElysiaWS<{ query: Query }>
 
+const PEER_DISCONNECTED_MSG = JSON.stringify({ type: 'onclose', message: 'peer disconnected' })
+
 interface BeforeHandleContext {
   query: Query
 }
@@ -79,10 +81,10 @@ export function close(ws: Ws): void {
   }
 
   // Guard against stale close events: when a peer reconnects, open() replaces
-  // entry.ws before Bun fires the async close event for the old ws. Without this
-  // check, the stale close would null out the new ws and publish a spurious
-  // 'onclose' to the room, disconnecting the other peer.
-  if (entry.ws !== ws) {
+  // entry.ws before Bun fires the async close event for the old ws.
+  // Elysia creates a new ElysiaWS wrapper for each event call, so we must
+  // compare the underlying Bun socket (ws.raw) rather than wrapper identity.
+  if (entry.ws === null || entry.ws.raw !== ws.raw) {
     entry.log.debug({ role: entry.role }, 'stale ws close event, ignoring')
     return
   }
@@ -90,7 +92,16 @@ export function close(ws: Ws): void {
   entry.ws = null
   entry.disconnectedAt = Date.now()
 
-  ws.publish(roomId, JSON.stringify({ type: 'onclose', message: 'peer disconnected' }))
+  // ws.publish() is a no-op once the connection is closed — notify remaining
+  // peers directly instead.
+  for (const [pid, peer] of room.peers) {
+    if (pid !== peerId && peer.ws !== null) {
+      try { peer.ws.send(PEER_DISCONNECTED_MSG) } catch (err) {
+        entry.log.warn({ err }, 'failed to notify peer of disconnect')
+      }
+    }
+  }
+
   ws.unsubscribe(roomId)
 
   entry.log.info({ role: entry.role }, 'peer disconnected')

@@ -4,6 +4,7 @@ import { beforeHandle, open, close, message, type Ws } from '../src/ws-handlers'
 import { CLOSE_CODES } from '../src/types'
 
 type MockWs = Ws & {
+  raw: object
   _sends: string[]
   _publishes: [string, string | Buffer][]
   _subscribes: string[]
@@ -13,12 +14,14 @@ type MockWs = Ws & {
 }
 
 function makeMockWs(room: string, peerId: string): MockWs {
+  const raw = {}
   const _sends: string[] = []
   const _publishes: [string, string | Buffer][] = []
   const _subscribes: string[] = []
   const _unsubscribes: string[] = []
   const _closes: [number, string?][] = []
   const mock: any = {
+    raw,
     data: { query: { room, peerId } },
     send: (msg: string) => _sends.push(msg),
     publish: (topic: string, msg: string | Buffer) => _publishes.push([topic, msg]),
@@ -147,19 +150,34 @@ describe('open — reconnection', () => {
 describe('close — soft-evict', () => {
   beforeEach(() => rooms.clear())
 
-  it('publishes onclose, sets ws=null and disconnectedAt, keeps entry', () => {
-    const ws = makeMockWs('r1', 'alice')
-    open(ws)
-    close(ws)
+  it('sends onclose to the other peer, sets ws=null and disconnectedAt, keeps entry', () => {
+    const alice = makeMockWs('r1', 'alice')
+    const bob = makeMockWs('r1', 'bob')
+    open(alice)
+    open(bob)
+    close(alice)
 
-    expect(ws._publishes).toContainEqual([
-      'r1',
-      JSON.stringify({ type: 'onclose', message: 'peer disconnected' }),
-    ])
+    expect(bob._sends).toContain(JSON.stringify({ type: 'onclose', message: 'peer disconnected' }))
     const entry = rooms.get('r1')!.peers.get('alice')!
     expect(entry.ws).toBeNull()
     expect(entry.disconnectedAt).not.toBeNull()
     expect(typeof entry.disconnectedAt).toBe('number')
+  })
+
+  it('stale close event (after reconnect) is ignored', () => {
+    const alice1 = makeMockWs('r1', 'alice')
+    const bob = makeMockWs('r1', 'bob')
+    open(alice1)
+    open(bob)
+
+    // alice reconnects — open() swaps in alice2 before close(alice1) fires
+    const alice2 = makeMockWs('r1', 'alice')
+    open(alice2)
+    const bobSendsBefore = bob._sends.length
+    close(alice1)
+
+    expect(bob._sends.length).toBe(bobSendsBefore)
+    expect(rooms.get('r1')!.peers.get('alice')?.ws).toBe(alice2)
   })
 })
 
