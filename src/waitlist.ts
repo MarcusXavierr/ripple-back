@@ -1,4 +1,5 @@
 import { Elysia, t } from 'elysia'
+import { cors } from '@elysiajs/cors'
 import postgres from 'postgres'
 import { logger } from './logger'
 
@@ -15,6 +16,7 @@ await db`CREATE TABLE IF NOT EXISTS waitlist (
 )`
 
 export const waitlist = new Elysia()
+  .use(cors({ origin: '*' }))
   .post(
     '/waitlist',
     async ({ body, set }) => {
