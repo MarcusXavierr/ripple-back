@@ -1,6 +1,8 @@
 import { Elysia, t } from 'elysia'
 import { openapi } from '@elysiajs/openapi'
+import { cors } from '@elysiajs/cors'
 import { beforeHandle, open, close, message } from './ws-handlers'
+import { waitlist } from './waitlist'
 
 const WS_DOCS = `
 ## WebSocket Endpoint \`/ws\`
@@ -81,6 +83,7 @@ Peer A reconnects  →  wss://.../ws?room=r1&peerId=alice
 `
 
 export const app = new Elysia()
+  .use(cors({ origin: '*' }))
   .use(openapi({
     path: '/reference',
     documentation: {
@@ -91,6 +94,7 @@ export const app = new Elysia()
       },
     },
   }))
+  .use(waitlist)
   .get('/', () => 'Hello Ma friend', {
     detail: {
       summary: 'Health check',
